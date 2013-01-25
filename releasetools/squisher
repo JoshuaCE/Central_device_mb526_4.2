@@ -62,23 +62,33 @@ echo
 mkdir $REPACK/ota
 (
 cd $REPACK/ota
-printf "Unpacking $OTAPACKAGE..."
+echo -e $CL_CYN"Unpacking $OTAPACKAGE..."$CL_RST
 unzip $QUIET $OTAPACKAGE
-echo
-cd $REPACK/ota/system/framework
+echo -e
+
+# Move all apks to the same directory so xargs can
+# use also with framework-res.apk. This allow process
+# framework-res.apk in parallel with other apks
+mkdir -p $REPACK/parallel
+cd $REPACK/parallel
+cp $REPACK/ota/system/framework/framework-res.apk .
+cp $REPACK/ota/system/app/*.apk .
+
+# Do optimization in parallel
+find ./ -name \*.apk | $XARGS $OPTICHARGER
+
+# Move optimized apks to repack directory
+mv -f $REPACK/parallel/framework-res.apk $REPACK/ota/system/framework/framework-res.apk
+mv -f $REPACK/parallel/*.apk $REPACK/ota/system/app/
+
+# Return to directory
+cd $REPACK/ota
+rm -rf $REPACK/parallel
 )
 
 # Include device specific script
 if [ -f $DEVICE_TOP/releasetools/squisher.sh ]; then
        . $DEVICE_TOP/releasetools/squisher.sh
-fi
-
-if [ "$1" != "fast" ]; then
-	$OPTICHARGER framework-res.apk
-	cd $REPACK/ota/system/app
-	find ./ -name \*.apk | $XARGS $OPTICHARGER
-else
-	echo "skipping apk optimization"
 fi
 
 # Fix build.prop
@@ -106,15 +116,11 @@ cd $REPACK
 		-not -name "tiap*" -print0 | xargs -0 arm-eabi-strip --strip-unneeded
 
 # Determine what to name the new signed package
-MODVERSION=`sed -n -e'/ro\.cm.version/s/^.*=//p' $REPACK/ota/system/build.prop`
-MODVERSION=`echo $MODVERSION | sed -r 's/CyanogenMod-//'`
-OUTFILE=$OUT/cm-$MODVERSION.zip
 
-if [ -n "$CM_NIGHTLY" ]; then
-	MODVERSION=`sed -n -e'/ro\.cm.version/s/^.*=//p' $REPACK/ota/system/build.prop`
-	MODVERSION=`echo $MODVERSION | sed -r 's/CyanogenMod-//'`
-	OUTFILE=$OUT/CM$MODVERSION.zip
-fi
+#MODVERSION=`sed -n -e'/ro\.modversion/s/^.*=//p' $REPACK/ota/system/build.prop`
+VERSION=`sed -n -e'/ro.aokp.version/s/^.*=//p' $REPACK/ota/system/build.prop`
+MODVERSION="$VERSION"
+OUTFILE=$OUT/$MODVERSION.zip
 
 # Pack it up and sign
 echo "Zipping package..."
