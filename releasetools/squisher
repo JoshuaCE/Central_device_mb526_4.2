@@ -50,7 +50,9 @@ fi
 OPTICHARGER=$DEVICE_TOP/releasetools/opticharger
 QUIET=-q
 DELETE_BINS="applypatch applypatch_static check_prereq recovery updater"
-
+DELETE_APKS="Launcher2.apk LiveWallpapers.apk VoiceDialer.apk SoundRecorder.apk VisualizationWallpapers.apk VideoEditor.apk Exchange2.apk HoloSpiralWallpaper.apk MagicSmokeWallpapers.apk NoiseField.apk Calendar.apk OpenWnn.apk PinyinIME.apk QuickSearchBox.apk Velvet.apk Provision.apk"
+DELETE_GALLERY="Gallery2.apk"
+DELETE_FONTS="MTLmr3m.ttf NanumGothic.ttf"
 
 REPACK=$OUT/repack.d
 printf "Sanitizing environment..."
@@ -65,7 +67,25 @@ cd $REPACK/ota
 printf "Unpacking $OTAPACKAGE..."
 unzip $QUIET $OTAPACKAGE
 echo
-cd $REPACK/ota/system/framework
+
+# Move all apks to the same directory so xargs can
+# use also with framework-res.apk. This allow process
+# framework-res.apk in parallel with other apks
+mkdir -p $REPACK/parallel
+cd $REPACK/parallel
+cp $REPACK/ota/system/framework/framework-res.apk .
+cp $REPACK/ota/system/app/*.apk .
+
+# Do optimization in parallel
+find ./ -name \*.apk | $XARGS $OPTICHARGER
+
+# Move optimized apks to repack directory
+mv -f $REPACK/parallel/framework-res.apk $REPACK/ota/system/framework/framework-res.apk
+mv -f $REPACK/parallel/*.apk $REPACK/ota/system/app/
+
+# Return to directory
+cd $REPACK/ota
+rm -rf $REPACK/parallel
 )
 
 # Include device specific script
@@ -73,19 +93,49 @@ if [ -f $DEVICE_TOP/releasetools/squisher.sh ]; then
        . $DEVICE_TOP/releasetools/squisher.sh
 fi
 
-if [ "$1" != "fast" ]; then
-	$OPTICHARGER framework-res.apk
-	cd $REPACK/ota/system/app
-	find ./ -name \*.apk | $XARGS $OPTICHARGER
-else
-	echo "skipping apk optimization"
-fi
-
 # Fix build.prop
 $SED -i \
 	-e '/ro\.kernel\.android\.checkjni/d' \
 	-e '/ro\.build\.type/s/eng/user/' \
 	$REPACK/ota/system/build.prop
+
+# Delete unnecessary binaries
+( cd $REPACK/ota/system/bin; echo $DELETE_BINS | xargs rm -f; )
+
+# Delete Offline charging mode files
+( cd $REPACK/ota/system/media; echo $DELETE_MEDIA | xargs rm -f; )
+
+# Delete Home Apk
+( cd $REPACK/ota/system/app; echo $DELETE_APKS | xargs rm -f; )
+
+# No need for modem.bin
+rm -f $REPACK/ota/modem.bin
+
+# No need for media/video
+rm -rf $REPACK/ota/system/media/video
+
+# Delete Unnecessary Fonts
+( cd $REPACK/ota/system/fonts; echo $DELETE_FONTS | xargs rm -f; )
+
+# No need for tts
+rm -rf $REPACK/ota/system/tts
+
+# No need for srec
+rm -rf $REPACK/ota/system/usr/srec
+
+# No need for recovery
+rm -rf $REPACK/ota/recovery
+rm -rf $REPACK/ota/system/etc/recovery-resource.dat
+
+# Fix LCD Density for slim
+DEVICELCD=`sed -n -e'/ro\.sf\.lcd_density/s/^.*=//p' $OUT/system/build.prop`
+if [ "$DEVICELCD" = "240" ]; then
+sed -i 's/ro.sf.lcd_density=240/ro.sf.lcd_density=182/g' $OUT/system/build.prop
+elif [ "$DEVICELCD" = "320" ]; then
+sed -i 's/ro.sf.lcd_density=320/ro.sf.lcd_density=241/g' $OUT/system/build.prop
+elif [ "$DEVICELCD" = "213" ]; then
+sed -i 's/ro.sf.lcd_density=213/ro.sf.lcd_density=182/g' $OUT/system/build.prop
+fi
 
 # Delete unnecessary binaries
 if [ -n "$DELETE_BINS" ]; then
@@ -106,15 +156,9 @@ cd $REPACK
 		-not -name "tiap*" -print0 | xargs -0 arm-eabi-strip --strip-unneeded
 
 # Determine what to name the new signed package
-MODVERSION=`sed -n -e'/ro\.cm.version/s/^.*=//p' $REPACK/ota/system/build.prop`
-MODVERSION=`echo $MODVERSION | sed -r 's/CyanogenMod-//'`
-OUTFILE=$OUT/cm-$MODVERSION.zip
-
-if [ -n "$CM_NIGHTLY" ]; then
-	MODVERSION=`sed -n -e'/ro\.cm.version/s/^.*=//p' $REPACK/ota/system/build.prop`
-	MODVERSION=`echo $MODVERSION | sed -r 's/CyanogenMod-//'`
-	OUTFILE=$OUT/CM$MODVERSION.zip
-fi
+MODVERSION=`sed -n -e'/ro\.modversion/s/^.*=//p' $REPACK/ota/system/build.prop`
+OUTFILE=$OUT/$MODVERSION.zip
+echo MODVERSION: $MODVERSION
 
 # Pack it up and sign
 echo "Zipping package..."
