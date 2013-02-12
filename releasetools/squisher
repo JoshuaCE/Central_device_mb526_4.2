@@ -97,6 +97,11 @@ $SED -i \
 	-e '/ro\.build\.type/s/eng/user/' \
 	$REPACK/ota/system/build.prop
 
+#Adjust RootBox Version
+printf "Adjusting RootBox Version..."
+sed -i -e 's/rootbox_//' $REPACK/ota/system/build.prop
+echo
+
 # Delete unnecessary binaries
 if [ -n "$DELETE_BINS" ]; then
 
@@ -118,7 +123,7 @@ cd $REPACK
 # Determine what to name the new signed package
 
 #MODVERSION=`sed -n -e'/ro\.modversion/s/^.*=//p' $REPACK/ota/system/build.prop`
-VERSION=`sed -n -e'/ro.aokp.version/s/^.*=//p' $REPACK/ota/system/build.prop`
+VERSION=`sed -n -e'/ro.rootbox.version/s/^.*=//p' $REPACK/ota/system/build.prop`
 MODVERSION="$VERSION"
 OUTFILE=$OUT/$MODVERSION.zip
 
@@ -138,9 +143,27 @@ rm -rf $REPACK
 echo
 
 # Create a md5 checksum image of the repacked package
+(
 img=`basename $OUTFILE`
 cd `dirname $OUTFILE`
 $MD5 $img >$img.md5sum
+ZIPSIZE=`ls -lah $OUTFILE | awk '{ print $5}' `
+echo
+echo -e $CL_BLU" ____ __ ____"
+echo -e " /\ _'\ /\ \__/\ _'\ "
+echo -e " \ \ \L\ \ ___ ___\ \ ,_\ \ \L\ \ ___ __ _"
+echo -e " \ \ , / / __'\ / __'\ \ \/\ \ _ < / __ \/\ \/'\ "
+echo -e " \ \ \ \ \/\ \L\ \/\ \L\ \ \ \_\ \ \L\ \/\ \L\ \/> </"
+echo -e " \ \_\ \_\ \____/\ \____/\ \_\ \ \____/\ \____//\_/\_\ "
+echo -e " \/_/\/ /\/___/ \/___/ \/__/ \/___/ \/___/ \//\/_/ "
+echo
+echo -e $CL_CYN"===========-RootBox Package complete-==========="$CL_RST
+echo -e $CL_CYN"zip:"$CL_MAG" $OUTFILE"$CL_RST
+echo -e $CL_CYN"md5:"$CL_MAG" $(cat $img.md5sum | awk '{ print $1 }')"$CL_RST
+echo -e $CL_CYN"size:"$CL_MAG" $ZIPSIZE"$CL_RST
+echo -e $CL_CYN"========================================"$CL_RST
+echo -e
+)
 
 # Build date and current time:
 cat $OUT/system/build.prop | grep ro.build.date=
