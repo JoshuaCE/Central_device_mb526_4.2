@@ -1,13 +1,8 @@
 # Inherit device configuration
 $(call inherit-product, device/moto/mb526/full_jordan.mk)
 
-# Boot animation
-TARGET_SCREEN_HEIGHT := 854
-TARGET_SCREEN_WIDTH := 480
-
 # Release name
 PRODUCT_RELEASE_NAME := Defy(+)
-
 UTC_DATE := $(shell date +%s)
 DATE := $(shell date +%Y%m%d)
 
